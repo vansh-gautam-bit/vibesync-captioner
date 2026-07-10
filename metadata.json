@@ -1,0 +1,6 @@
+{
+  "name": "Video Captioning Playground & Submission Hub",
+  "description": "An interactive full-stack playground to generate multi-style video captions and refine hackathon submission requirements.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
