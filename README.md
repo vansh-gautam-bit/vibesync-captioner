@@ -46,7 +46,7 @@ Designed for the **AMD Developer Hackathon – Track 2 (Video Captioning)**, the
 
 ## Home
 
-> *![alt text](image.png)*
+> *![alt text](image-5.png)*
 
 ---
 
@@ -64,7 +64,7 @@ Designed for the **AMD Developer Hackathon – Track 2 (Video Captioning)**, the
 
 ## Batch Submission Hub
 
-> *![alt text](image-3.png)*
+> *![alt text](image-4.png)*
 
 ---
 
