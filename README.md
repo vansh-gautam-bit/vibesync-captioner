@@ -19,6 +19,10 @@ The project combines **computer vision**, **multimodal AI**, and **large languag
 
 Designed for the **AMD Developer Hackathon – Track 2 (Video Captioning)**, the application demonstrates an efficient caption generation workflow using a **"See Once, Style Multiple Times"** architecture.
 
+## 🌐 Website
+
+**Website:** https://ais-pre-kp73cmw7wqihxjkhf7okvi-967387521715.asia-east1.run.app
+
 ---
 
 # ✨ Features
@@ -338,7 +342,7 @@ OFFLINE_MODE=true
 
 **Demo Video**
 
-> *(Add YouTube Link)*
+> *https://youtu.be/ZAXLcrMkfUA*
 
 ---
 
@@ -346,7 +350,7 @@ OFFLINE_MODE=true
 
 **Slides**
 
-> *(Add Google Slides Link)*
+> *https://docs.google.com/presentation/d/1NyPbLQ_9-KTOIaa0va69jbX2oBYRzYhk/edit?usp=sharing&ouid=101306952013196198287&rtpof=true&sd=true*
 
 ---
 
@@ -355,6 +359,13 @@ OFFLINE_MODE=true
 GitHub
 
 > *https://github.com/vansh-gautam-bit/vibesync-captioner*
+
+---
+
+## 🌐 Website
+
+**Live Demo:**  
+https://ais-pre-kp73cmw7wqihxjkhf7okvi-967387521715.asia-east1.run.app
 
 ---
 
