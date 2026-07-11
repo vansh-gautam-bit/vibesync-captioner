@@ -21,7 +21,7 @@ Designed for the **AMD Developer Hackathon – Track 2 (Video Captioning)**, the
 
 ## 🌐 Website
 
-**Website:** https://ais-pre-kp73cmw7wqihxjkhf7okvi-967387521715.asia-east1.run.app
+**Website:** https://video-captioning-playground-submission-hub.ai.studio
 
 ---
 
@@ -350,7 +350,7 @@ OFFLINE_MODE=true
 
 **Slides**
 
-> *https://docs.google.com/presentation/d/1NyPbLQ_9-KTOIaa0va69jbX2oBYRzYhk/edit?usp=sharing&ouid=101306952013196198287&rtpof=true&sd=true*
+> *https://drive.google.com/file/d/1OmDCNuAi9HnuXytqiOq_AV45b974h4vN/view?usp=drivesdk*
 
 ---
 
@@ -365,7 +365,8 @@ GitHub
 ## 🌐 Website
 
 **Live Demo:**  
-https://ais-pre-kp73cmw7wqihxjkhf7okvi-967387521715.asia-east1.run.app
+
+> *https://video-captioning-playground-submission-hub.ai.studio*
 
 ---
 
