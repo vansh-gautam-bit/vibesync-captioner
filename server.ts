@@ -48,6 +48,16 @@ function getGeminiClient() {
 // Helper to pause execution for a given number of milliseconds
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Helper to wrap any Promise with a timeout limit to prevent hanging network operations
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
+    )
+  ]);
+}
+
 // Format raw errors into friendly, professional troubleshooting suggestions
 function formatFriendlyError(error: any): string {
   const message = error?.message || String(error);
@@ -78,7 +88,8 @@ async function generateWithRetry(ai: any, params: any, retries = 3, baseDelayMs 
   let lastError: any = null;
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      return await ai.models.generateContent(params);
+      const apiPromise = ai.models.generateContent(params);
+      return await withTimeout(apiPromise, 15000, `Gemini API request for model ${params.model} timed out after 15s`);
     } catch (error: any) {
       lastError = error;
       const message = error.message || "";
@@ -281,7 +292,7 @@ async function generateWithFireworks(promptText: string, temperature = 0.7, json
   for (const modelName of uniqueModels) {
     try {
       console.log(`[Fireworks AI Cascade] Routing generation to model: ${modelName}...`);
-      const response = await fetch("https://api.fireworks.ai/inference/v1/chat/completions", {
+      const fetchPromise = fetch("https://api.fireworks.ai/inference/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -299,6 +310,8 @@ async function generateWithFireworks(promptText: string, temperature = 0.7, json
           response_format: jsonFormat ? { type: "json_object" } : undefined
         })
       });
+
+      const response = await withTimeout(fetchPromise, 15000, `Fireworks API request for model ${modelName} timed out after 15s`);
 
       if (!response.ok) {
         const errText = await response.text();
@@ -443,7 +456,7 @@ Make each caption around 2 to 4 sentences long. Ensure they represent their spec
           ];
 
           // Use the fast Gemini model with a simple prompt to get the visual description
-          const visualResponse = await generateContentWithFallback(ai, {
+          const visualResponse: any = await generateContentWithFallback(ai, {
             model: "gemini-3.5-flash",
             contents: { parts }
           });
@@ -527,7 +540,7 @@ Make each caption around 2 to 4 sentences long. Respond in a valid JSON structur
 
     parts.push({ text: promptText });
 
-    const response = await generateContentWithFallback(ai, {
+    const response: any = await generateContentWithFallback(ai, {
       model: "gemini-3.5-flash",
       contents: { parts: parts },
       config: {
@@ -592,7 +605,7 @@ app.post("/api/generate-tts", async (req, res) => {
 
     console.log(`Generating TTS with Gemini using voice: ${voiceName}...`);
     const ai = getGeminiClient();
-    let response;
+    let response: any;
 
     try {
       response = await generateWithRetry(ai, {
@@ -705,7 +718,7 @@ Output the code blocks clearly.`;
 
     console.log(`Refining submission (${mode}) with Gemini...`);
     const ai = getGeminiClient();
-    const response = await generateContentWithFallback(ai, {
+    const response: any = await generateContentWithFallback(ai, {
       model: "gemini-3.5-flash",
       contents: promptText
     });
@@ -721,6 +734,13 @@ Output the code blocks clearly.`;
     });
   }
 });
+
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    status: "ok"
+  });
+});
+
 
 
 // Vite middleware and static asset serving
