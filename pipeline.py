@@ -85,42 +85,41 @@ class VideoPipeline:
         prev_gray_frame = None
         
         try:
-            frame_idx = 0
-            while len(extracted_keyframes) < max_frames:
-                # Set the reader position to the next step
-                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+            current_idx = 0
+            next_target_idx = 0
+            while len(extracted_keyframes) < max_frames and current_idx < total_frames:
                 ret, frame = cap.read()
                 if not ret:
                     break
                     
-                # Calculate simple visual metrics to pass as factual signals
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                mean_brightness = float(np.mean(gray))
-                
-                # Simple motion estimation from previous extracted frame
-                motion_score = 0.0
-                if prev_gray_frame is not None:
-                    # Resize to a smaller common size to quickly calculate difference
-                    resized_current = cv2.resize(gray, (100, 100))
-                    resized_prev = cv2.resize(prev_gray_frame, (100, 100))
-                    frame_diff = cv2.absdiff(resized_current, resized_prev)
-                    motion_score = float(np.sum(frame_diff) / (100 * 100 * 255.0)) * 100.0
+                if current_idx == next_target_idx:
+                    # Calculate simple visual metrics to pass as factual signals
+                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    mean_brightness = float(np.mean(gray))
                     
-                prev_gray_frame = gray
-                timestamp = round(frame_idx / fps, 2)
-                
-                extracted_keyframes.append({
-                    "timestamp_secs": timestamp,
-                    "frame_index": frame_idx,
-                    "mean_brightness": round(mean_brightness, 2),
-                    "motion_activity": round(motion_score, 2)
-                })
-                
-                # Advance to next sample point
-                frame_idx += frame_step
-                if frame_idx >= total_frames:
-                    break
+                    # Simple motion estimation from previous extracted frame
+                    motion_score = 0.0
+                    if prev_gray_frame is not None:
+                        # Resize to a smaller common size to quickly calculate difference
+                        resized_current = cv2.resize(gray, (100, 100))
+                        resized_prev = cv2.resize(prev_gray_frame, (100, 100))
+                        frame_diff = cv2.absdiff(resized_current, resized_prev)
+                        motion_score = float(np.sum(frame_diff) / (100 * 100 * 255.0)) * 100.0
+                        
+                    prev_gray_frame = gray
+                    timestamp = round(current_idx / fps, 2)
                     
+                    extracted_keyframes.append({
+                        "timestamp_secs": timestamp,
+                        "frame_index": current_idx,
+                        "mean_brightness": round(mean_brightness, 2),
+                        "motion_activity": round(motion_score, 2)
+                    })
+                    
+                    next_target_idx += frame_step
+                    
+                current_idx += 1
+                
             logger.info(f"Extracted {len(extracted_keyframes)} keyframes from {metadata['filename']}")
             return extracted_keyframes
         except Exception as e:

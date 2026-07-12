@@ -23,8 +23,6 @@ CONTAINER_INPUT_PATH = "/input/tasks.json"
 
 DEFAULT_OUTPUT_PATH = "./output/results.json"
 CONTAINER_OUTPUT_PATH = "/output/results.json"
-JUDGE_OUTPUT_PATH = "./output/judge_scores.json"
-CONTAINER_JUDGE_OUTPUT_PATH = "/output/judge_scores.json"
 
 DEFAULT_MODEL = "accounts/fireworks/models/gemma-4-31b-it"
 
@@ -34,13 +32,6 @@ class CaptionSet(BaseModel):
     humorous_tech: str = Field(..., description="Amusing geek/programmer oriented narrative with technology memes")
     humorous_non_tech: str = Field(..., description="Relatable general-audience comedy and daily analogies")
 
-class JudgeScore(BaseModel):
-    factual_grounding: int = Field(..., ge=1, le=5, description="Factual representation relative to core scene description (1-5)")
-    tone_separation: int = Field(..., ge=1, le=5, description="Clear stylistic distinction from other tones (1-5)")
-    reasoning: str = Field(..., description="Brief justification for the score")
-
-class LLMJudgeResult(BaseModel):
-    scores: Dict[str, JudgeScore] = Field(..., description="Judge scores mapped by caption style keys")
 
 class VideoCaptioningApp:
     def __init__(self):
@@ -70,10 +61,8 @@ class VideoCaptioningApp:
             return CONTAINER_INPUT_PATH
         return DEFAULT_INPUT_PATH
 
-    def _get_output_path(self, is_judge: bool = False) -> str:
+    def _get_output_path(self) -> str:
         """Dynamically resolves output results path based on host vs container environment."""
-        if is_judge:
-            return CONTAINER_JUDGE_OUTPUT_PATH if os.path.exists("/output") else JUDGE_OUTPUT_PATH
         return CONTAINER_OUTPUT_PATH if os.path.exists("/output") else DEFAULT_OUTPUT_PATH
 
     def load_tasks(self) -> List[Dict[str, Any]]:
@@ -221,80 +210,6 @@ class VideoCaptioningApp:
             logger.error(f"Error during caption synthesis API call: {e}")
             raise
 
-    def run_llm_judge(self, core_scene: str, captions: CaptionSet) -> LLMJudgeResult:
-        """
-        Phase 4: Automated LLM-Judge Evaluation.
-        Prompts model to grade each generated caption from 1 to 5 on 'Factual Grounding' and 'Tone Separation'.
-        """
-        captions_payload = {
-            "formal": captions.formal,
-            "sarcastic": captions.sarcastic,
-            "humorous_tech": captions.humorous_tech,
-            "humorous_non_tech": captions.humorous_non_tech
-        }
-
-        prompt = (
-            f"You are an objective AI Quality Judge evaluating captioning styles for high-fidelity accuracy.\n"
-            f"Compare the generated styled captions against the neutral master core scene description.\n\n"
-            f"Master Factual Reference:\n"
-            f"\"{core_scene}\"\n\n"
-            f"Captions to Judge:\n"
-            f"{json.dumps(captions_payload, indent=2)}\n\n"
-            f"EVALUATION CRITERIA:\n"
-            f"Rate each of the four captions on a scale of 1 to 5 for:\n"
-            f"1. Factual Grounding: How faithfully does it respect the facts in the Master Reference (no wild hallucinations)?\n"
-            f"2. Tone Separation: How well does it embody its respective style boundary (e.g. is sarcastic actually sarcastic, is humorous-tech full of tech jargon)?\n\n"
-            f"Return your ratings as a JSON object matching this schema:\n"
-            f"{{\n"
-            f"  \"scores\": {{\n"
-            f"    \"formal\": {{\n"
-            f"       \"factual_grounding\": 5,\n"
-            f"       \"tone_separation\": 5,\n"
-            f"       \"reasoning\": \"...\"\n"
-            f"    }},\n"
-            f"    ... (repeat for other three styles)\n"
-            f"  }}\n"
-            f"}}\n"
-        )
-
-        if self.offline_mode:
-            # Deterministic mock grading
-            mock_scores = {}
-            for style in ["formal", "sarcastic", "humorous_tech", "humorous_non_tech"]:
-                mock_scores[style] = JudgeScore(
-                    factual_grounding=5 if style == "formal" else 4,
-                    tone_separation=5,
-                    reasoning="Simulated offline validation check passed successfully."
-                )
-            return LLMJudgeResult(scores=mock_scores)
-
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": "You are a professional quality assurance model that outputs structured grading JSON."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.2,
-                response_format={"type": "json_object"}
-            )
-            data = json.loads(response.choices[0].message.content.strip())
-            scores_data = {}
-            for k, v in data.get("scores", {}).items():
-                scores_data[k] = JudgeScore(
-                    factual_grounding=v.get("factual_grounding", 5),
-                    tone_separation=v.get("tone_separation", 5),
-                    reasoning=v.get("reasoning", "Evaluated by Fireworks Judge.")
-                )
-            return LLMJudgeResult(scores=scores_data)
-        except Exception as e:
-            logger.error(f"Error during LLM judge execution: {e}")
-            # Fallback mock return so batch run doesn't fail
-            return LLMJudgeResult(scores={
-                style: JudgeScore(factual_grounding=1, tone_separation=1, reasoning=f"Judge failed with error: {e}")
-                for style in ["formal", "sarcastic", "humorous_tech", "humorous_non_tech"]
-            })
-
     def run_pipeline(self):
         """Orchestrates the entire 4-phase execution loop across all scheduled tasks."""
         logger.info("🎬 Starting AMD Developer Hackathon Video Captioning Pipeline...")
@@ -305,7 +220,6 @@ class VideoCaptioningApp:
             return
 
         final_results = {}
-        all_judge_scores = {}
 
         # Loop through each task with high-level fail-safe protection
         for idx, task in enumerate(tasks, 1):
@@ -390,38 +304,14 @@ class VideoCaptioningApp:
             logger.info(f"  [Humorous Tech]: {caption_set.humorous_tech}")
             logger.info(f"  [Humorous Non-Tech]: {caption_set.humorous_non_tech}")
 
-            # Phase 4: Automated LLM-Judge Evaluation
-            try:
-                logger.info("Phase 4: Running automated LLM-Judge for caption grading...")
-                judge_result = self.run_llm_judge(core_desc, caption_set)
-                all_judge_scores[filename] = judge_result.model_dump()
-                for style, score in judge_result.scores.items():
-                    logger.info(f"  📊 {style.upper()} Rating -> Factual: {score.factual_grounding}/5 | Tone: {score.tone_separation}/5 (Reasoning: {score.reasoning})")
-            except Exception as e:
-                logger.warning(f"Failed to run LLM Judge, generating mock scores: {e}")
-                mock_scores = {}
-                for style in ["formal", "sarcastic", "humorous_tech", "humorous_non_tech"]:
-                    mock_scores[style] = {
-                        "factual_grounding": 4,
-                        "tone_separation": 4,
-                        "reasoning": "Fallback local review passed."
-                    }
-                all_judge_scores[filename] = {"scores": mock_scores}
-
         # Explicitly save final output schemas
-        output_results_path = self._get_output_path(is_judge=False)
-        output_judge_path = self._get_output_path(is_judge=True)
+        output_results_path = self._get_output_path()
 
         os.makedirs(os.path.dirname(output_results_path), exist_ok=True)
-        os.makedirs(os.path.dirname(output_judge_path), exist_ok=True)
 
         with open(output_results_path, "w") as f:
             json.dump(final_results, f, indent=4)
         logger.info(f"\n💾 Saved formal results schema matching specification to {output_results_path}")
-
-        with open(output_judge_path, "w") as f:
-            json.dump(all_judge_scores, f, indent=4)
-        logger.info(f"📊 Saved automated judge scores to {output_judge_path}")
         logger.info("🎉 Hackathon pipeline cycle completed successfully!")
 
 if __name__ == "__main__":
