@@ -1,6 +1,8 @@
 import dotenv from "dotenv";
 import express from "express";
 import path from "path";
+import fs from "fs";
+import { spawnSync } from "child_process";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 
@@ -20,6 +22,26 @@ if (dotenvResult.error) {
   console.log("[Dotenv Debug] Keys found in .env:", Object.keys(dotenvResult.parsed));
 } else {
   console.warn("[Dotenv Debug] .env file was empty or not found.");
+}
+
+// Dual-mode boot detection: if /input/tasks.json exists, execute the python batch pipeline and exit
+const containerInputPath = "/input/tasks.json";
+if (fs.existsSync(containerInputPath)) {
+  console.log(`[Boot Mode] Detected ${containerInputPath}. Running batch pipeline mode...`);
+  try {
+    const pythonCmd = process.platform === "win32" ? "python" : "python3";
+    const result = spawnSync(pythonCmd, ["main.py"], { stdio: "inherit" });
+    if (result.status === 0) {
+      console.log("[Boot Mode] Batch pipeline completed successfully.");
+      process.exit(0);
+    } else {
+      console.error("[Boot Mode] Batch pipeline failed with status:", result.status);
+      process.exit(result.status || 1);
+    }
+  } catch (err) {
+    console.error("[Boot Mode] Error executing batch pipeline:", err);
+    process.exit(1);
+  }
 }
 
 const app = express();
@@ -605,7 +627,7 @@ app.post("/api/generate-tts", async (req, res) => {
 
     console.log(`Generating TTS with Gemini using voice: ${voiceName}...`);
     const ai = getGeminiClient();
-    let response: any;
+    let response:any;
 
     try {
       response = await generateWithRetry(ai, {
@@ -735,12 +757,12 @@ Output the code blocks clearly.`;
   }
 });
 
+
 app.get("/health", (req, res) => {
   res.status(200).json({
     status: "ok"
   });
 });
-
 
 
 // Vite middleware and static asset serving

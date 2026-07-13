@@ -99,6 +99,42 @@ class VideoCaptioningApp:
             logger.error(f"Failed to parse task definitions from {input_path}: {e}")
             return []
 
+    def download_video(self, url: str, output_dir: str = "./input") -> str:
+        """Downloads a video from a remote URL and returns the local file path."""
+        import requests
+        import urllib.parse
+        
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Try to parse filename from URL
+        parsed_url = urllib.parse.urlparse(url)
+        filename = os.path.basename(parsed_url.path)
+        if not filename or "." not in filename:
+            filename = f"downloaded_video_{abs(hash(url))}.mp4"
+            
+        local_path = os.path.join(output_dir, filename)
+        
+        # If already downloaded, reuse it
+        if os.path.exists(local_path):
+            logger.info(f"Using cached downloaded video at: {local_path}")
+            return local_path
+            
+        logger.info(f"Downloading video from {url} to {local_path}...")
+        try:
+            response = requests.get(url, stream=True, timeout=60)
+            response.raise_for_status()
+            
+            with open(local_path, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        
+            logger.info(f"Successfully downloaded video to {local_path}")
+            return local_path
+        except Exception as e:
+            logger.error(f"Failed to download remote video from {url}: {e}")
+            raise
+
     def generate_core_scene_description(self, metadata: Dict[str, Any], keyframes: List[Dict[str, Any]], fallback_desc: str) -> str:
         """
         Phase 2: 'See Once, Style Four-Times' Optimization.
@@ -219,24 +255,34 @@ class VideoCaptioningApp:
             logger.error("No active tasks found. Pipeline aborted.")
             return
 
-        final_results = {}
+        final_results = []
 
         # Loop through each task with high-level fail-safe protection
         for idx, task in enumerate(tasks, 1):
+            task_id = task.get("task_id")
             video_path = task.get("video_path") or task.get("video_url")
             fallback_desc = task.get("fallback_description") or task.get("description") or "No manual description provided."
             filename = os.path.basename(video_path) if video_path else f"unknown_task_{idx}"
+            output_key = task_id if task_id else filename
 
-            logger.info(f"\n--- Processing Task [{idx}/{len(tasks)}]: {filename} ---")
+            logger.info(f"\n--- Processing Task [{idx}/{len(tasks)}]: {output_key} ---")
             
+            # Resolve remote video URL and download if necessary
+            actual_video_path = video_path
+            if video_path and (video_path.startswith("http://") or video_path.startswith("https://")):
+                try:
+                    actual_video_path = self.download_video(video_path)
+                except Exception as e:
+                    logger.warning(f"Failed to download video from {video_path}: {e}")
+
             # Phase 1: Video Ingestion & Processing with graceful fallback
             try:
                 logger.info("Phase 1: Analyzing video container and extracting strategic keyframes...")
-                if video_path and os.path.exists(video_path):
-                    metadata = VideoPipeline.get_video_metadata(video_path)
-                    keyframes = VideoPipeline.extract_keyframes(video_path, max_frames=8)
+                if actual_video_path and os.path.exists(actual_video_path):
+                    metadata = VideoPipeline.get_video_metadata(actual_video_path)
+                    keyframes = VideoPipeline.extract_keyframes(actual_video_path, max_frames=8)
                 else:
-                    logger.warning(f"Video file missing or offline at: '{video_path}'. Using simulated metadata.")
+                    logger.warning(f"Video file missing or offline at: '{actual_video_path}'. Using simulated metadata.")
                     metadata = {
                         "filename": filename,
                         "duration_seconds": 45.0,
@@ -289,14 +335,16 @@ class VideoCaptioningApp:
                     humorous_non_tech=f"When you expect a quiet day but end up dealing with: {core_desc}."
                 )
                 
-            # Build the exact JSON schema requested: {"formal": "...", "sarcastic": "...", "humorous-tech": "...", "humorous-non-tech": "..."}
-            # Note: The request asks for keys hyphenated matching 'humorous-tech' and 'humorous-non-tech' in output
-            final_results[filename] = {
-                "formal": caption_set.formal,
-                "sarcastic": caption_set.sarcastic,
-                "humorous-tech": caption_set.humorous_tech,
-                "humorous-non-tech": caption_set.humorous_non_tech
-            }
+            # Build the exact JSON schema requested: [{"task_id": "...", "captions": {"formal": "...", "sarcastic": "...", "humorous_tech": "...", "humorous_non_tech": "..."}}]
+            final_results.append({
+                "task_id": output_key,
+                "captions": {
+                    "formal": caption_set.formal,
+                    "sarcastic": caption_set.sarcastic,
+                    "humorous_tech": caption_set.humorous_tech,
+                    "humorous_non_tech": caption_set.humorous_non_tech
+                }
+            })
             
             logger.info("Captions successfully synthesized:")
             logger.info(f"  [Formal]: {caption_set.formal}")
